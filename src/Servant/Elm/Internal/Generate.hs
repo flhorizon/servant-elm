@@ -12,6 +12,7 @@ import           Data.Text                    (Text)
 import qualified Data.Text                    as T
 import qualified Data.Text.Lazy               as L
 import qualified Data.Text.Encoding           as T
+import           Data.Time.Calendar           (fromGregorian)
 import           Elm                          (ElmDatatype)
 import qualified Elm
 import           Servant.API                  (NoContent (..))
@@ -40,6 +41,8 @@ data ElmOptions = ElmOptions
     -- ^ Types that represent an empty Http response.
   , stringElmTypes        :: [ElmDatatype]
     -- ^ Types that represent a String.
+  , dayElmTypes          :: [ElmDatatype]
+    -- ^ Types that represent a Day.
   }
 
 
@@ -61,6 +64,8 @@ The default options are:
 >     [ toElmType NoContent ]
 > , stringElmTypes =
 >     [ toElmType "" ]
+> , dayElmTypes =
+>     [ toElmType 1970-01-01 ]
 > }
 -}
 defElmOptions :: ElmOptions
@@ -74,6 +79,9 @@ defElmOptions = ElmOptions
   , stringElmTypes =
       [ Elm.toElmType ("" :: String)
       , Elm.toElmType ("" :: T.Text)
+      ]
+  , dayElmTypes =
+      [ Elm.toElmType (fromGregorian 1970 1 1)
       ]
   }
 
@@ -299,10 +307,15 @@ mkLetParams opts request =
       case qarg ^. F.queryArgType of
         F.Normal ->
           let
+            elmTypeExpr =
+                qarg ^. F.queryArgName . F.argType
+
             -- Don't use "toString" on Elm Strings, otherwise we get extraneous quotes.
             toStringSrc =
-              if isElmStringType opts (qarg ^. F.queryArgName . F.argType) then
+              if isElmStringType opts elmTypeExpr then
                 ""
+              else if isElmDayType opts elmTypeExpr then
+                "Exts.Date.toRFC3339 >> "
               else
                 "toString >> "
           in
@@ -453,6 +466,14 @@ this type in Elm.
 isElmStringType :: ElmOptions -> ElmDatatype -> Bool
 isElmStringType opts elmTypeExpr =
   elmTypeExpr `elem` stringElmTypes opts
+
+
+{- | Determines whether we call `Exts.Date.toRFC3339` on URL captures and
+query params of this type in Elm.
+-}
+isElmDayType :: ElmOptions -> ElmDatatype -> Bool
+isElmDayType opts elmTypeExpr =
+  elmTypeExpr `elem` dayElmTypes opts
 
 
 -- Doc helpers
